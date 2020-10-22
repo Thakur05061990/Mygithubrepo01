@@ -1,0 +1,63 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildAndPublish
+        displayName: 'Build and publish artifacts'
+        steps:
+        - task: Maven@3
+          inputs:
+            mavenPomFile: 'app/pom.xml'
+            publishJUnitResults: true
+            testResultsFiles: '**/surefire-reports/TEST-*.xml'
+            javaHomeOption: 'JDKVersion'
+            mavenVersionOption: 'Default'
+            mavenAuthenticateFeed: false
+            effectivePomSkip: false
+            sonarQubeRunAnalysis: false
+
+        - task: CopyFiles@2
+          inputs:
+            SourceFolder: '$(System.DefaultWorkingDirectory)'
+            Contents: '**/target/*.?(war|jar)'
+            TargetFolder: '$(build.artifactstagingdirectory)'
+
+        - task: PublishBuildArtifacts@1
+          inputs:
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'drop'
+            publishLocation: 'Container'
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: DeployWebApp
+        displayName: 'Deploy to Web App'
+        steps:
+        # - task: DownloadPipelineArtifact@2
+        #   inputs:
+        #     buildType: 'current'
+        - task: DownloadBuildArtifacts@0
+          inputs:
+            buildType: 'current'
+            downloadType: 'single'
+            artifactName: 'drop'
+            itemPattern: '**/target/*.?(war|jar)'
+            downloadPath: '$(System.ArtifactsDirectory)'
+        - task: AzureWebApp@1
+          inputs:
+            azureSubscription: 'Microsoft Azure Sponsorship(976709cf-14cb-4d18-a8c1-68a602b93aed)'
+            appType: 'webAppLinux'
+            appName: 'jspringboot'
+            package: '$(System.ArtifactsDirectory)/drop/**/target/*.?(war|jar)'
